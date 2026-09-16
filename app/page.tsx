@@ -24,10 +24,10 @@ const snapshot: DashboardData = {
   channel: { name: 'How The World Works', niche: 'Engineering / Technology / Infrastructure', promise: 'The systems, machines and ideas behind everyday life.' },
   counts: { opportunities: 4, researching: 4, approved: 0, in_production: 0, scheduled: 5, published: 0, performance: 0, learnings: 0, decisions: 0 },
   opportunities: [
-    { title: 'How a MASSIVE Steel Block Becomes a Giant Industrial Gear', pillar: 'Machines', priority: 'HIGH', status: 'REVIEW', next_action: 'Research technical process and packaging' },
-    { title: 'Why Modern Factories Look Almost Empty', pillar: 'Systems', priority: 'MEDIUM', status: 'REVIEW', next_action: 'Research automation economics and visuals' },
-    { title: 'The Machines That Turn Pressure Into Power', pillar: 'Technology', priority: 'MEDIUM', status: 'REVIEW', next_action: 'Research hydraulic systems and examples' },
-    { title: 'How Robots Are Replacing the Most Repetitive Factory Jobs', pillar: 'Technology', priority: 'MEDIUM', status: 'REVIEW', next_action: 'Research factory robotics evidence' },
+    { id: '', title: 'How a MASSIVE Steel Block Becomes a Giant Industrial Gear', pillar: 'Machines', priority: 'HIGH', status: 'REVIEW', next_action: 'Research technical process and packaging' },
+    { id: '', title: 'Why Modern Factories Look Almost Empty', pillar: 'Systems', priority: 'MEDIUM', status: 'REVIEW', next_action: 'Research automation economics and visuals' },
+    { id: '', title: 'The Machines That Turn Pressure Into Power', pillar: 'Technology', priority: 'MEDIUM', status: 'REVIEW', next_action: 'Research hydraulic systems and examples' },
+    { id: '', title: 'How Robots Are Replacing the Most Repetitive Factory Jobs', pillar: 'Technology', priority: 'MEDIUM', status: 'REVIEW', next_action: 'Research factory robotics evidence' },
   ],
   pipeline: [
     { title: 'The Giant Machine That Eats the Earth', current_state: 'READY_TO_PUBLISH' },
@@ -38,8 +38,11 @@ const snapshot: DashboardData = {
     { title: 'The Giant Machine That Eats the Earth', platform: 'TikTok', scheduled_at: '2026-09-17 10:00', status: 'PENDING' },
     { title: 'How Does a Giant Tunnel Boring Machine Actually Move Underground?', platform: 'YouTube', scheduled_at: '2026-09-18 16:00', status: 'PENDING' },
   ],
-  learnings: [], flags: ['4 content items are researching.', '5 publication records are pending; none is published.', 'NO DATA YET: first-party performance metrics are not available.'],
-  decisions: [], recentHistory: [], metrics: [],
+  learnings: [],
+  flags: ['4 content items are researching.', '5 publication records are pending; none is published.', 'NO DATA YET: first-party performance metrics are not available.'],
+  decisions: [],
+  recentHistory: [],
+  metrics: [],
 };
 
 function fmtDate(value?: string) {
@@ -49,9 +52,9 @@ function fmtDate(value?: string) {
 
 function tone(value?: string) {
   const v = String(value || '').toUpperCase();
-  if (['HIGH', 'PUBLISHED', 'COMPLETE', 'READY_TO_PUBLISH'].includes(v)) return 'positive';
+  if (['HIGH', 'PUBLISHED', 'COMPLETE', 'READY_TO_PUBLISH', 'APPROVED'].includes(v)) return 'positive';
   if (['MEDIUM', 'REVIEW', 'PENDING', 'RESEARCHING', 'IN_PROGRESS'].includes(v)) return 'warn';
-  if (['FAILED', 'CANCELLED', 'IGNORE'].includes(v)) return 'danger';
+  if (['FAILED', 'CANCELLED', 'IGNORE', 'REJECTED'].includes(v)) return 'danger';
   return '';
 }
 
@@ -59,6 +62,8 @@ export default function Home() {
   const [data, setData] = useState<DashboardData>(snapshot);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState('overview');
+  const [actingId, setActingId] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState('');
 
   async function refresh() {
     setLoading(true);
@@ -73,10 +78,38 @@ export default function Home() {
     }
   }
 
+  async function performAction(action: 'APPROVE' | 'REJECT' | 'START_RESEARCH', opportunityId: string, title: string) {
+    if (!opportunityId) {
+      setActionMessage('Snapshot mode: action requires NEON LIVE.');
+      return;
+    }
+    let reason = '';
+    if (action === 'REJECT') reason = window.prompt(`Reason for rejecting:\n${title}`, '') || '';
+    if (action !== 'REJECT' && !window.confirm(`${action.replace('_', ' ')} this opportunity?\n\n${title}`)) return;
+
+    setActingId(opportunityId);
+    setActionMessage('');
+    try {
+      const r = await fetch('/api/action', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action, opportunityId, reason }),
+      });
+      const result = await r.json();
+      if (!r.ok || !result.ok) throw new Error(result.message || 'Action failed');
+      setActionMessage(`${action.replace('_', ' ')} recorded for “${title}”.`);
+      await refresh();
+    } catch (error: unknown) {
+      setActionMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setActingId(null);
+    }
+  }
+
   useEffect(() => { refresh(); }, []);
   const c = data.counts || snapshot.counts;
   const nav = ['overview', 'radar', 'pipeline', 'schedule', 'learning'];
-  const visibleOpps = useMemo(() => (data.opportunities || []).slice(0, 6), [data.opportunities]);
+  const visibleOpps = useMemo(() => (data.opportunities || []).filter((o) => !['REJECTED', 'ARCHIVED'].includes(String(o.status || '').toUpperCase())).slice(0, 8), [data.opportunities]);
   const visiblePipeline = useMemo(() => (data.pipeline || []).slice(0, 10), [data.pipeline]);
   const visibleSchedule = useMemo(() => (data.scheduled || []).slice(0, 10), [data.scheduled]);
   const visibleLearnings = useMemo(() => (data.learnings || []).slice(0, 8), [data.learnings]);
@@ -109,6 +142,8 @@ export default function Home() {
       {nav.map((item) => <button key={item} className={active === item ? 'nav-tab active' : 'nav-tab'} onClick={() => setActive(item)}>{item}</button>)}
     </nav>
 
+    {actionMessage && <div className="action-message">{actionMessage}</div>}
+
     {active === 'overview' && <>
       <section className="hero-grid">
         <div className="hero-card"><div className="hero-label">CHANNEL BRAIN</div><div className="hero-title">{data.channel?.niche || snapshot.channel?.niche}</div><div className="hero-copy">Discovery → research → production → publication → learning, with the database as the system of record.</div></div>
@@ -116,7 +151,7 @@ export default function Home() {
       </section>
       <section className="stats">{stats.map(([a, b, d]) => <div className="stat" key={a as string}><div className="stat-kicker">{a}</div><div className="stat-value">{b}</div><div className="stat-note">{d}</div></div>)}</section>
       <section className="grid-2">
-        <Panel title="Opportunity Radar" meta="Latest">{visibleOpps.map((o, i) => <Opportunity key={i} item={o} />)}</Panel>
+        <Panel title="Opportunity Radar" meta="Latest">{visibleOpps.map((o, i) => <Opportunity key={o.id || i} item={o} onAction={performAction} />)}</Panel>
         <Panel title="Production Pipeline" meta={`${(data.pipeline || []).length} items`}>{visiblePipeline.map((p, i) => <PipelineRow key={i} item={p} />)}</Panel>
       </section>
       <section className="grid-2">
@@ -125,7 +160,7 @@ export default function Home() {
       </section>
     </>}
 
-    {active === 'radar' && <section className="single-panel"><Panel title="Opportunity Radar" meta={`${visibleOpps.length} shown`}>{visibleOpps.map((o, i) => <Opportunity key={i} item={o} detailed />)}</Panel></section>}
+    {active === 'radar' && <section className="single-panel"><Panel title="Opportunity Radar" meta={`${visibleOpps.length} shown`}>{visibleOpps.map((o, i) => <Opportunity key={o.id || i} item={o} detailed onAction={performAction} />)}</Panel></section>}
 
     {active === 'pipeline' && <section className="single-panel"><Panel title="Production Pipeline" meta={`${visiblePipeline.length} items`}>{visiblePipeline.map((p, i) => <div className="pipeline-card" key={i}><div className="pipeline-title">{p.title}</div><div className="pipeline-meta"><span className={`state ${tone(p.content_status || p.current_state)}`}>{p.content_status || p.current_state || 'UNKNOWN'}</span><span>{p.production_status || '—'}</span><span>{p.publication_status || '—'}</span><span>Updated {fmtDate(p.updated_at)}</span></div></div>)}</Panel></section>}
 
@@ -144,8 +179,20 @@ function Panel({ title, meta, children }: { title: string; meta: string; childre
   return <div className="panel"><div className="panel-head"><h2>{title}</h2><span>{meta}</span></div>{children}</div>;
 }
 
-function Opportunity({ item, detailed = false }: { item: any; detailed?: boolean }) {
-  return <div className="op"><div className="op-top"><div className="op-title">{item.title}</div><div className="chips"><span className="badge">{item.pillar}</span><span className={`badge ${tone(item.priority)}`}>{item.priority}</span><span className={`badge ${tone(item.status)}`}>{item.status}</span></div></div>{detailed && item.metadata && <div className="op-next">Signals recorded in Radar metadata.</div>}<div className="op-next">Next: {item.next_action || 'Review editorial opportunity'}</div><div className="sub">Discovered {fmtDate(item.discovered_at)}</div></div>;
+function Opportunity({ item, detailed = false, onAction }: { item: any; detailed?: boolean; onAction: (action: 'APPROVE' | 'REJECT' | 'START_RESEARCH', opportunityId: string, title: string) => void }) {
+  const actionable = ['REVIEW', 'RESEARCHING', 'APPROVED'].includes(String(item.status || '').toUpperCase());
+  const busy = item.id && false;
+  return <div className="op">
+    <div className="op-top"><div className="op-title">{item.title}</div><div className="chips"><span className="badge">{item.pillar}</span><span className={`badge ${tone(item.priority)}`}>{item.priority}</span><span className={`badge ${tone(item.status)}`}>{item.status}</span></div></div>
+    {detailed && item.metadata && <div className="op-next">Signals recorded in Radar metadata.</div>}
+    <div className="op-next">Next: {item.next_action || 'Review editorial opportunity'}</div>
+    <div className="sub">Discovered {fmtDate(item.discovered_at)}</div>
+    {actionable && item.id && <div className="op-actions">
+      <button disabled={busy} onClick={() => onAction('START_RESEARCH', item.id, item.title)}>Research</button>
+      <button disabled={busy} onClick={() => onAction('APPROVE', item.id, item.title)}>Approve</button>
+      <button className="danger-btn" disabled={busy} onClick={() => onAction('REJECT', item.id, item.title)}>Reject</button>
+    </div>}
+  </div>;
 }
 
 function PipelineRow({ item }: { item: any }) {
