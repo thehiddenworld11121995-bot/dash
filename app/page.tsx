@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 
 type DashboardData = {
   source: string;
@@ -139,7 +140,7 @@ export default function Home() {
   </main>;
 }
 
-function Panel({ title, meta, children }: { title: string; meta: string; children: React.ReactNode }) {
+function Panel({ title, meta, children }: { title: string; meta: string; children: ReactNode }) {
   return <div className="panel"><div className="panel-head"><h2>{title}</h2><span>{meta}</span></div>{children}</div>;
 }
 
