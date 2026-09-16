@@ -26,7 +26,7 @@ export async function GET() {
 
     const [opportunities, pipeline, scheduled, learnings, decisions, recentHistory, metrics] = await Promise.all([
       sql`
-        select title, pillar, priority, status, next_action, discovered_at, metadata
+        select id, title, pillar, priority, status, next_action, discovered_at, metadata
         from opportunities
         where channel_id = ${channel.id}
         order by discovered_at desc
